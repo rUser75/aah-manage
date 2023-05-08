@@ -36,6 +36,7 @@ Please note, as wrote in UI **WARNING loading a new token will delete your old t
 If you have already configured the API TOKEN please don't generate a new one if you don't know what you're doing
 
 Before start you must export the enviroment variable **AAH_SERVER** with the FQDN of the Automantion Hub server
+
 ``export AAH_SERVER=aahserver.domain``
 
 
