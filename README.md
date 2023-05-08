@@ -12,6 +12,7 @@ The action formormed are:
 ## Basic Usage
 ### Installation
 see INSTALL.md file
+
 ### Synopsis
 aah-manage commands follow a simple format:
 ````
@@ -28,10 +29,14 @@ optional arguments:
                         start sync of remote repository (Repo Managment)
 ````
 
+You can retrieve the AUTHTOKEN using the opion **--retriveAuthToken** you must provvide user and password for the API login.
 The AUTHTOKEN can be obtained via the http cli:
 *collections -> API token management*
 Please note, as wrote in UI **WARNING loading a new token will delete your old token.**
 If you have already configured the API TOKEN please don't generate a new one if you don't know what you're doing
+
+Before start you must export the enviroment variable **AAH_SERVER** with the FQDN of the Automantion Hub server
+``export AAH_SERVER=aahserver.domain``
 
 
 
