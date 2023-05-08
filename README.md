@@ -2,7 +2,7 @@
 
 ## Description
 
-This is a cli simple interface to the Ansible Automation Hub that use the AAH API to perform some actions. 
+This is a simple CLI interface to the Ansible Automation Hub that use the AAH API to perform some actions. 
 
 The action formormed are:
 - Repo Management sync the remote repo community and th-certified
