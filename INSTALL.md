@@ -24,3 +24,9 @@ on RH8 are required the followings python3 modules
 
 for install the required modules run the follow command
 ``pip3 install  argparse termcolor  os requests urllib3``
+
+
+copy the file in you preferred location and make it executable
+
+``chmod 750 aah-manage``
+
