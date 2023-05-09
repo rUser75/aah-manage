@@ -21,9 +21,10 @@ on RH8 are required the followings python3 modules
 - os
 - requests
 - urllib3
+- jq
 
 for install the required modules run the follow command
-``pip3 install  argparse termcolor  os requests urllib3``
+``pip3 install  argparse termcolor  os requests urllib3 jq``
 
 
 copy the file in you preferred location and make it executable
