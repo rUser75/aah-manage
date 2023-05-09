@@ -1,0 +1,149 @@
+#!/usr/bin/env python3.9
+# author: rUser75
+#
+#
+#
+# aah-manage.py
+# ommand for manage same action on Ansible Automation Hub
+
+
+import argparse
+from termcolor import colored
+import os
+import requests
+import json
+import urllib3
+from jq import jq
+
+version = 1
+tlc_ca_bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
+
+os.environ['JOBLIB_TEMP_FOLDER'] = '/tmp'
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--authToken', type=str, required=False, help='API token for authentication' )
+parser.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token' )
+parser.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true' )
+parser.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME',help='start sync of remote repository (Repo Managment)')
+parser.add_argument('-k',  required=False, dest='ssl_verify', help='Allow insecure server connections when using SSL', action='store_true')
+parser.add_argument('-v',  required=False, dest='verbose', help='write verbose output ', action='store_true' )
+
+args = parser.parse_args()
+
+def write_debug(msg):
+    if args.verbose:
+        print(colored('Verbose:  '+msg, 'magenta'))
+
+def sync_remote_repo(remote_repo):
+    headers = {
+       'Authorization': f"Token {args.authToken}",
+    }
+    print('Submit sync of repository: '+remote_repo)
+    response = requests.request('post', 'https://'+os.environ['AAH_SERVER']+'/api/galaxy/content/'+remote_repo+'/v3/sync/', headers=headers, verify=custom_certificate_path)
+    if ( response.status_code != 200 ):
+        print(colored('ERROR: sync of repository: '+remote_repo+' failed. httpd retcode: '+str(response.status_code), 'red'))
+        exit(1)
+    else:
+         print(colored('SUCCESS: sync of repository: '+remote_repo+' started.','green'),colored(' httpd retcode: '+str(response.status_code)))
+
+def retrive_auth_token(credential):
+    user= credential.split(":")[0]
+    password= credential.split(":")[1]
+
+    response = requests.post('https://'+os.environ['AAH_SERVER']+'/api/galaxy/v3/auth/token/', verify=custom_certificate_path, auth=(user,password))
+    if ( response.status_code != 200 ):
+        print(colored('ERROR: unable to get authToken httpd retcode: '+str(response.status_code), 'red'))
+    else:
+        write_debug('SUCCESS: generating a new authToken')
+        print(response.content.decode("utf-8"))
+#    return 0
+
+
+
+def get_json_list(api_path):
+    # api_path: the API URL
+    # sub_set:  extract the specified object from json
+    headers = {
+       'Authorization': f"Token {args.authToken}",
+       'Accept': 'application/json'
+    }
+    params = {
+       'limit': '500',
+    }
+    response = requests.get(
+        'https://'+os.environ['AAH_SERVER'] +api_path,
+        params=params,
+        headers=headers,
+        verify=custom_certificate_path
+    )
+    if ( response.status_code != 200 ):
+        print(colored('ERROR: unable to get list of EE from: '+api_path+' httpd retcode: '+str(response.status_code), 'red'))
+        return False
+    else:
+        write_debug('SUCCESS: retrieving authToken')
+        return(response.json())
+
+
+def print_json_formatted(json_data,sub_set,jq_filter,title=False):
+    # json_data:         the json data
+    # sub_set:           extract the specified object from json
+    # jq_filter:         jq filter
+    # title:             the column fields name
+
+    write_debug('convert data to json extraction the key: '+sub_set)
+    tmp_json=json_data[sub_set]
+    if title:
+        print(title)
+        print("===================================================================")
+    print(jq(jq_filter).transform(tmp_json))
+
+
+
+
+
+
+if (not args.ssl_verify):
+    write_debug('Setup secure connection use '+tlc_ca_bundle)
+    custom_certificate_path = tlc_ca_bundle
+else:
+    write_debug('Setup unsecure connection ssl_verify: '+str(not args.ssl_verify))
+    custom_certificate_path= False
+    urllib3.disable_warnings()
+
+
+
+if args.generateAuthToken:
+    write_debug('Generate a new authToken from: '+os.environ['AAH_SERVER'])
+    retrive_auth_token(args.retriveAuthToken)
+    exit(0)
+else:
+    if not args.sync and not args.getEEList:
+        print(colored('ERROR you must specify an option', 'red'))
+        parser.print_help()
+        exit(1)
+
+    if not args.authToken:
+        print(colored('ERROR you must specify the authToken. It you don\'t have it please obtaint it with the option retriveAuthToken', 'red'))
+        exit(1)
+
+if "AAH_SERVER" not in os.environ:
+    print(colored('AAH-SERVER environment variable is empty. Please specify one', 'red'))
+    exit(1)
+
+
+
+write_debug('Using as remote server: '+os.environ['AAH_SERVER'])
+write_debug('Insecure SSL connection: '+str( not args.ssl_verify))
+
+if args.sync:
+    write_debug('Found argument sync with option: '+args.sync)
+    if args.sync in ('community', 'rh-certified'):
+        sync_remote_repo(args.sync)
+    else:
+        print(colored('ERROR: the value must be one of community/rh-certified', 'red'))
+
+
+if args.getEEList:
+    write_debug('Found argument getEEList')
+    ee_names = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/')
+    print_json_formatted(ee_names,'data','.|map([.name,.pulp.repository.remote.last_sync_task.state // "nd"]|join(","))|join("\n")','EE name,sync status')
