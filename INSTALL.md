@@ -26,6 +26,8 @@ on RH8 are required the followings python3 modules
 for install the required modules run the follow command
 ``pip3 install  argparse termcolor  os requests urllib3 jq``
 
+Please consider using VENV pythons to be sure not to create conflicts with the packages installed on the operating system
+
 
 copy the file in you preferred location and make it executable
 
