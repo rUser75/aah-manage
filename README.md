@@ -4,9 +4,10 @@
 
 This is a simple CLI interface to the Ansible Automation Hub that use the AAH API to perform some actions. 
 
-The action formormed are:
+The action performed are:
 - Repo Management sync the remote repo community and th-certified
-- List the availables Execution Environments images (todo)
+- List the availables Execution Environments images and the synchronization status
+- List the availables Execution Environments images version (todo)
 - Delete Execution Environments images (todo)
 
 ## Basic Usage
@@ -16,20 +17,24 @@ see INSTALL.md file
 ### Synopsis
 aah-manage commands follow a simple format:
 ````
-./aah-manage -h
-usage: aah-manage [-h] --authToken AUTHTOKEN [-k] [-v] [--sync REPOREMOTENAME]
+usage: aah-manage [-h] [--authToken AUTHTOKEN] [--generateAuthToken CREDENTIAL] [--getEEList] [--sync REPOREMOTENAME] [-k] [-v]
 
 optional arguments:
   -h, --help            show this help message and exit
   --authToken AUTHTOKEN
                         API token for authentication
-  -k                    Allow insecure server connections when using SSL
-  -v                    write verbose output
+  --generateAuthToken CREDENTIAL
+                        generate a NEW AuthToken. You must specify the credetial for the login (user:password). WARNING: loading a
+                        new token will delete your old token
+  --getEEList           print the list of available EE images
   --sync REPOREMOTENAME
                         start sync of remote repository (Repo Managment)
+  -k                    Allow insecure server connections when using SSL
+  -v                    write verbose output
+
 ````
 
-You can retrieve the AUTHTOKEN using the opion **--retriveAuthToken** you must provvide user and password for the API login.
+You can generate a new AUTHTOKEN using the opion **--generateAuthToken** you must provvide user and password for the API login.
 The AUTHTOKEN can be obtained via the http cli:
 
 *collections -> API token management*
