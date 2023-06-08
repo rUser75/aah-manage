@@ -21,10 +21,18 @@ tlc_ca_bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
 os.environ['JOBLIB_TEMP_FOLDER'] = '/tmp'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--authToken', type=str, required=False, help='API token for authentication' )
-parser.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token' )
-parser.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true' )
-parser.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME',help='start sync of remote repository (Repo Managment)')
+token_grp  = parser.add_mutually_exclusive_group()
+
+token_grp.add_argument('--authToken', type=str, required=False, help='API token for authentication' )
+token_grp.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token' )
+action_grp  = parser.add_mutually_exclusive_group()
+action_grp.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true' )
+action_grp.add_argument('--getEEVersion', required=False, help='print the list of available EE images version', action='store_true' )
+
+action_grp.add_argument('--deleteEE', required=False, help='delete the specified EE image', metavar=('EEname', 'SHA'), nargs=2 )
+
+#deleteEE.add_argument('--eeName',  required=False, help='delete the specified EE image', action='store_true' )
+action_grp.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME',help='start sync of remote repository (Repo Managment). REPOREMOTENAME: community / rh-certified' )
 parser.add_argument('-k',  required=False, dest='ssl_verify', help='Allow insecure server connections when using SSL', action='store_true')
 parser.add_argument('-v',  required=False, dest='verbose', help='write verbose output ', action='store_true' )
 
@@ -60,7 +68,30 @@ def retrive_auth_token(credential):
 
 
 
+def delete_ee_image(api_path):
+    # send DELETE request to the specified api_path
+    # api_path: the API URL
+    headers = {
+       'Authorization': f"Token {args.authToken}"
+    }
+    write_debug('send DELETE request to: '+api_path)
+    response = requests.delete(
+        'https://'+os.environ['AAH_SERVER'] +api_path,
+        headers=headers,
+        verify=custom_certificate_path,
+    )
+
+    if ( response.status_code != 202 ):
+        write_debug('ERROR: send DELETE request to: '+api_path)
+        print(colored('ERROR: unable to delete: '+api_path+' httpd retcode: '+str(response.status_code), 'red'))
+        return False
+    else:
+        write_debug('SUCCESS: submitted DELETE request to: '+api_path)
+        return True
+
+
 def get_json_list(api_path):
+    # send a GET request  to the specified api_path and return a json list
     # api_path: the API URL
     # sub_set:  extract the specified object from json
     headers = {
@@ -74,32 +105,30 @@ def get_json_list(api_path):
         'https://'+os.environ['AAH_SERVER'] +api_path,
         params=params,
         headers=headers,
-        verify=custom_certificate_path
+        verify=custom_certificate_path,
     )
     if ( response.status_code != 200 ):
         print(colored('ERROR: unable to get list of EE from: '+api_path+' httpd retcode: '+str(response.status_code), 'red'))
         return False
     else:
-        write_debug('SUCCESS: retrieving authToken')
+        write_debug('SUCCESS: retrieving json data')
+    #    print(json.dumps(response.json(), indent=2))
         return(response.json())
 
 
-def print_json_formatted(json_data,sub_set,jq_filter,title=False):
+def print_json_formatted(json_data,sub_set,jq_filter,multiple_output=False):
     # json_data:         the json data
     # sub_set:           extract the specified object from json
     # jq_filter:         jq filter
-    # title:             the column fields name
 
-    write_debug('convert data to json extraction the key: '+sub_set)
-    tmp_json=json_data[sub_set]
-    if title:
-        print(title)
-        print("===================================================================")
-    print(jq(jq_filter).transform(tmp_json))
+    if (sub_set == "None" ):
+        tmp_json=json_data
+    else:
+        tmp_json=json_data[sub_set]
 
-
-
-
+    if ( len(tmp_json) == 0):
+        return()
+    return(jq(jq_filter).transform(tmp_json,multiple_output=multiple_output))
 
 
 if (not args.ssl_verify):
@@ -117,7 +146,7 @@ if args.generateAuthToken:
     retrive_auth_token(args.retriveAuthToken)
     exit(0)
 else:
-    if not args.sync and not args.getEEList:
+    if not args.sync and not args.getEEList and not args.getEEVersion and not args.deleteEE:
         print(colored('ERROR you must specify an option', 'red'))
         parser.print_help()
         exit(1)
@@ -127,7 +156,7 @@ else:
         exit(1)
 
 if "AAH_SERVER" not in os.environ:
-    print(colored('AAH-SERVER environment variable is empty. Please specify one', 'red'))
+    print(colored('AAH_SERVER environment variable is empty. Please specify one', 'red'))
     exit(1)
 
 
@@ -146,4 +175,42 @@ if args.sync:
 if args.getEEList:
     write_debug('Found argument getEEList')
     ee_names = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/')
-    print_json_formatted(ee_names,'data','.|map([.name,.pulp.repository.remote.last_sync_task.state // "nd"]|join(","))|join("\n")','EE name,sync status')
+    print("EE name,sync status")
+    print("=========================================================================")
+    print(print_json_formatted(ee_names,'data','.|map([.name,.pulp.repository.remote.last_sync_task.state // "nd"]|join(","))|join("\n")'))
+    exit(0)
+
+if args.getEEVersion:
+    write_debug('Found argument getEEVersion')
+
+    #get the list of all available images names
+    ee_names = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/')
+    #ee_names_list = print_json_formatted(ee_names,'data','.|map([.name]|join(","))|join("\n")')
+    ee_names_list = print_json_formatted(ee_names,'data','.|map([.name]|join(","))')
+
+    #loop over the images names to obtain the images details
+    print("image name,pulp_id,sha,version")
+    print("=========================================================================")
+    for eename in ee_names_list:
+        tmp_ee_images = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/' + eename + '/_content/images/')
+        write_debug('/api/galaxy/_ui/v1/execution-environments/repositories/' + eename + '/_content/images/')
+        tmp_ee_images_detail=print_json_formatted(tmp_ee_images,"data",'.|map([.pulp_id,.digest,.tags[] //"nd"]|join(","))|join("\n")',False)
+        #workaround for sort the list
+        py=json.dumps(tmp_ee_images_detail)
+        py_tmp=py.replace("\"","").split("\\n")
+        py_tmp.sort(key=len)
+        for row in py_tmp:
+            print(eename+","+row)
+
+if args.deleteEE:
+    write_debug("delete specified EEimages")
+    if (not args.deleteEE[1].startswith('sha256:')):
+            write_debug("the SHA format is wrong")
+            print('ERROR: wrong SHA format. SHA  must be in the format sha256:XXXXXXXXXXXX')
+            exit(1)
+    delete_status=delete_ee_image('/api/galaxy/_ui/v1/execution-environments/repositories/' + args.deleteEE[0] + '/_content/images/'+args.deleteEE[1]+'/' )
+    if delete_status:
+        print('Successfull submitted the deletion of images:'+ args.deleteEE[1])
+        exit(0)
+    else:
+        print(colored('ERROR: failed to submit the deletion of: '+args.deleteEE[1], 'red'))
