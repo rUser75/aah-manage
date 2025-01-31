@@ -37,6 +37,14 @@ Imposta le Variabili d'Ambiente (opzionale):
 * AAH_SERVER: L'indirizzo del server per Ansible Automation Hub.
 
 ##Utilizzo
+Puoi generare un nuovo AUTHTOKEN usando l'opzione --generateAuthToken devi fornire utente e password per l'accesso API. L'AUTHTOKEN può essere ottenuto tramite http cli:
+
+collections -> API token management
+
+Nota bene, come scritto in UI WARNING il caricamento di un nuovo token cancellerà il tuo vecchio token.
+
+Se hai già configurato l'API TOKEN ti preghiamo di non generarne uno nuovo se non sai cosa stai facendo
+
 ### Comandi di Base
 
 * Elenca gli Execution Environments:
