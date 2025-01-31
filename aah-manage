@@ -1,11 +1,22 @@
 #!/usr/bin/env python3.9
 # author: rUser75
-#
-#
-#
-# aah-manage.py
-# ommand for manage same action on Ansible Automation Hub
 
+# aah-manage.py
+
+# This script is designed to manage various actions on Ansible Automation Hub.
+# It provides functionalities to list, synchronize, and manage Execution Environments
+# and Ansible collections. The script can authenticate using an API token provided
+# via argument or environment variable. Supported operations include generating new
+# tokens, synchronizing remote repositories, deleting images and collections, and
+# displaying lists of available resources. It is a versatile tool for administrators
+# working with Ansible Automation Hub.
+
+# Usage:
+# - To list available Execution Environments: --getEEList
+# - To synchronize a remote repository: --sync <REPOREMOTENAME>
+# - To list or manage collections: --getCollectionList, --removeCollection, --deleteCollection
+# - To list all available repositories and collections: --listAvailables
+# - Authenticate using a token: --authToken <TOKEN> or environment variable AUTH_TOKEN
 
 import argparse
 from termcolor import colored
@@ -14,203 +25,315 @@ import requests
 import json
 import urllib3
 from jq import jq
+import sys
 
-version = 1
+version = 1.2
 tlc_ca_bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
 
 os.environ['JOBLIB_TEMP_FOLDER'] = '/tmp'
 
 parser = argparse.ArgumentParser()
-token_grp  = parser.add_mutually_exclusive_group()
+token_grp = parser.add_mutually_exclusive_group()
 
-token_grp.add_argument('--authToken', type=str, required=False, help='API token for authentication' )
-token_grp.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token' )
-action_grp  = parser.add_mutually_exclusive_group()
-action_grp.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true' )
-action_grp.add_argument('--getEEVersion', required=False, help='print the list of available EE images version', action='store_true' )
+token_grp.add_argument('--authToken', type=str, required=False, help='API token for authentication')
+token_grp.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token')
+action_grp = parser.add_mutually_exclusive_group()
+action_grp.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true')
+action_grp.add_argument('--getEEVersion', required=False, help='print the list of available EE images version', action='store_true')
+action_grp.add_argument('--listAvailables', required=False, help='list all available repositories and collections', action='store_true')
 
-action_grp.add_argument('--deleteEE', required=False, help='delete the specified EE image', metavar=('EEname', 'SHA'), nargs=2 )
+action_grp.add_argument('--deleteEE', required=False, help='delete the specified EE image', metavar=('EEname', 'SHA'), nargs=2)
+action_grp.add_argument('--getCollectionList', required=False, help='print the list of community general, experimental', action='store_true')
+action_grp.add_argument('--removeCollection', required=False, help='remove the specified collection from repository', action='store_true')
+action_grp.add_argument('--deleteCollection', required=False, help='remove the specified collection from system', action='store_true')
+parser.add_argument('--namespace', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Namespace for the collection, required with --getCollectionList, --removeCollection, and --deleteCollection')
+parser.add_argument('--collection', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Name of the collection,required with --getCollectionList, --removeCollection, and --deleteCollection')
+parser.add_argument('--repositoryName', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Name of the repository, required with --getCollectionList, --removeCollection, and --deleteCollection')
 
-#deleteEE.add_argument('--eeName',  required=False, help='delete the specified EE image', action='store_true' )
-action_grp.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME',help='start sync of remote repository (Repo Managment). REPOREMOTENAME: community / rh-certified' )
-parser.add_argument('-k',  required=False, dest='ssl_verify', help='Allow insecure server connections when using SSL', action='store_true')
-parser.add_argument('-v',  required=False, dest='verbose', help='write verbose output ', action='store_true' )
+action_grp.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME', help='start sync of remote repository (Repo Managment). REPOREMOTENAME: community / rh-certified')
+action_grp.add_argument('--reclaimSpace', required=False, help='Trigger an asynchronous space reclaim operation.', action='store_true')
+parser.add_argument('-k', required=False, dest='ssl_verify', help='Allow insecure server connections when using SSL', action='store_true')
+parser.add_argument('-v', required=False, dest='verbose', help='write verbose output ', action='store_true')
 
 args = parser.parse_args()
 
 def write_debug(msg):
     if args.verbose:
-        print(colored('Verbose:  '+msg, 'magenta'))
+        print(colored('Verbose:  ' + msg, 'magenta'))
 
 def sync_remote_repo(remote_repo):
     headers = {
-       'Authorization': f"Token {args.authToken}",
+        'Authorization': f"Token {auth_token}",
     }
-    print('Submit sync of repository: '+remote_repo)
-    response = requests.request('post', 'https://'+os.environ['AAH_SERVER']+'/api/galaxy/content/'+remote_repo+'/v3/sync/', headers=headers, verify=custom_certificate_path)
-    if ( response.status_code != 200 ):
-        print(colored('ERROR: sync of repository: '+remote_repo+' failed. httpd retcode: '+str(response.status_code), 'red'))
+    print('Submit sync of repository: ' + remote_repo)
+    response = requests.request('post', 'https://' + os.environ['AAH_SERVER'] + '/api/galaxy/content/' + remote_repo + '/v3/sync/', headers=headers, verify=custom_certificate_path)
+    if response.status_code != 200:
+        print(colored('ERROR: sync of repository: ' + remote_repo + ' failed. httpd retcode: ' + str(response.status_code), 'red'))
         exit(1)
     else:
-         print(colored('SUCCESS: sync of repository: '+remote_repo+' started.','green'),colored(' httpd retcode: '+str(response.status_code)))
+        print(colored('SUCCESS: sync of repository: ' + remote_repo + ' started.', 'green'), colored(' httpd retcode: ' + str(response.status_code)))
 
 def retrive_auth_token(credential):
-    user= credential.split(":")[0]
-    password= credential.split(":")[1]
+    user = credential.split(":")[0]
+    password = credential.split(":")[1]
 
-    response = requests.post('https://'+os.environ['AAH_SERVER']+'/api/galaxy/v3/auth/token/', verify=custom_certificate_path, auth=(user,password))
-    if ( response.status_code != 200 ):
-        print(colored('ERROR: unable to get authToken httpd retcode: '+str(response.status_code), 'red'))
+    response = requests.post('https://' + os.environ['AAH_SERVER'] + '/api/galaxy/v3/auth/token/', verify=custom_certificate_path, auth=(user, password))
+    if response.status_code != 200:
+        print(colored('ERROR: unable to get authToken httpd retcode: ' + str(response.status_code), 'red'))
     else:
         write_debug('SUCCESS: generating a new authToken')
         print(response.content.decode("utf-8"))
-#    return 0
 
-
-
-def delete_ee_image(api_path):
-    # send DELETE request to the specified api_path
-    # api_path: the API URL
+def delete_from_repository(repository_href, collection_href):
     headers = {
-       'Authorization': f"Token {args.authToken}"
+        'Authorization': f"Token {auth_token}",
+        'Content-Type': 'application/json'
     }
-    write_debug('send DELETE request to: '+api_path)
+    payload = {
+        "remove_content_units": [collection_href]
+    }
+    write_debug('send POST request to: ' + repository_href)
+    response = requests.post(
+        'https://' + os.environ['AAH_SERVER'] + repository_href,
+        headers=headers,
+        json=payload,
+        verify=custom_certificate_path,
+    )
+
+    if response.status_code != 202:
+        write_debug('ERROR: send POST request to: ' + repository_href)
+        print(colored('ERROR: unable to delete collection from: ' + repository_href + ' httpd retcode: ' + str(response.status_code), 'red'))
+        return False
+    else:
+        write_debug('SUCCESS: submitted POST request to: ' + repository_href)
+        return True
+
+def delete_from_system(api_path):
+    headers = {
+        'Authorization': f"Token {auth_token}"
+    }
+    write_debug('send DELETE request to: ' + api_path)
     response = requests.delete(
-        'https://'+os.environ['AAH_SERVER'] +api_path,
+        'https://' + os.environ['AAH_SERVER'] + api_path,
         headers=headers,
         verify=custom_certificate_path,
     )
 
-    if ( response.status_code != 202 ):
-        write_debug('ERROR: send DELETE request to: '+api_path)
-        print(colored('ERROR: unable to delete: '+api_path+' httpd retcode: '+str(response.status_code), 'red'))
+    if response.status_code != 202:
+        write_debug('ERROR: send DELETE request to: ' + api_path)
+        print(colored('ERROR: unable to delete: ' + api_path + ' httpd retcode: ' + str(response.status_code), 'red'))
         return False
     else:
-        write_debug('SUCCESS: submitted DELETE request to: '+api_path)
+        write_debug('SUCCESS: submitted DELETE request to: ' + api_path)
         return True
 
-
 def get_json_list(api_path):
-    # send a GET request  to the specified api_path and return a json list
-    # api_path: the API URL
-    # sub_set:  extract the specified object from json
     headers = {
-       'Authorization': f"Token {args.authToken}",
-       'Accept': 'application/json'
+        'Authorization': f"Token {auth_token}",
+        'Accept': 'application/json'
     }
     params = {
-       'limit': '500',
+        'limit': '500',
     }
+    write_debug("open URL: " + api_path)
     response = requests.get(
-        'https://'+os.environ['AAH_SERVER'] +api_path,
+        'https://' + os.environ['AAH_SERVER'] + api_path,
         params=params,
         headers=headers,
         verify=custom_certificate_path,
     )
-    if ( response.status_code != 200 ):
-        print(colored('ERROR: unable to get list of EE from: '+api_path+' httpd retcode: '+str(response.status_code), 'red'))
+    if response.status_code != 200:
+        print(colored('ERROR: unable to get list of EE from: ' + api_path + ' httpd retcode: ' + str(response.status_code), 'red'))
         return False
     else:
         write_debug('SUCCESS: retrieving json data')
-    #    print(json.dumps(response.json(), indent=2))
-        return(response.json())
+        return response.json()
 
-
-def print_json_formatted(json_data,sub_set,jq_filter,multiple_output=False):
-    # json_data:         the json data
-    # sub_set:           extract the specified object from json
-    # jq_filter:         jq filter
-
-    if (sub_set == "None" ):
-        tmp_json=json_data
+def print_json_formatted(json_data, sub_set, jq_filter, multiple_output=False):
+    write_debug('function print_json_formatted')
+    if sub_set == "None":
+        tmp_json = json_data
     else:
-        tmp_json=json_data[sub_set]
+        tmp_json = json_data[sub_set]
 
-    if ( len(tmp_json) == 0):
-        return()
-    return(jq(jq_filter).transform(tmp_json,multiple_output=multiple_output))
+    if len(tmp_json) == 0:
+        return
+    return jq(jq_filter).transform(tmp_json, multiple_output=multiple_output)
 
+def reclaim_space():
+    headers = {
+        'Authorization': f"Token {auth_token}",
+        'Content-Type': 'application/json'
+    }
+    payload = {
+        "repo_hrefs": ['*']
+    }
+    print('Triggering asynchronous space reclaim operation.')
+    api_path= '/api/galaxy/pulp/api/v3/repositories/reclaim_space/'
+    write_debug("api path:" + api_path)
+    response = requests.post(
+        'https://' + os.environ['AAH_SERVER'] + api_path,
+        headers=headers,
+        json=payload,
+        verify=custom_certificate_path
+    )
+    if response.status_code != 202:
+        print(colored('ERROR: space reclaim operation failed. httpd retcode: ' + str(response.status_code), 'red'))
+    else:
+        print(colored('SUCCESS: space reclaim operation started.See AAH Task managment for the result', 'green'))
 
-if (not args.ssl_verify):
-    write_debug('Setup secure connection use '+tlc_ca_bundle)
+if not args.ssl_verify:
+    write_debug('Setup secure connection use ' + tlc_ca_bundle)
     custom_certificate_path = tlc_ca_bundle
 else:
-    write_debug('Setup unsecure connection ssl_verify: '+str(not args.ssl_verify))
-    custom_certificate_path= False
+    write_debug('Setup unsecure connection ssl_verify: ' + str(not args.ssl_verify))
+    custom_certificate_path = False
     urllib3.disable_warnings()
 
-
+auth_token = args.authToken or os.getenv('AUTH_TOKEN')
 
 if args.generateAuthToken:
-    write_debug('Generate a new authToken from: '+os.environ['AAH_SERVER'])
-    retrive_auth_token(args.retriveAuthToken)
+    write_debug('Generate a new authToken from: ' + os.environ['AAH_SERVER'])
+    retrive_auth_token(args.generateAuthToken)
     exit(0)
 else:
-    if not args.sync and not args.getEEList and not args.getEEVersion and not args.deleteEE:
+    if not any([args.sync, args.getEEList, args.getEEVersion, args.listAvailables, args.deleteEE, args.getCollectionList, args.removeCollection, args.deleteCollection, args.reclaimSpace]):
         print(colored('ERROR you must specify an option', 'red'))
         parser.print_help()
         exit(1)
 
-    if not args.authToken:
-        print(colored('ERROR you must specify the authToken. It you don\'t have it please obtaint it with the option retriveAuthToken', 'red'))
+    if not auth_token:
+        print(colored('ERROR you must specify the authToken either as an environment variable AUTH_TOKEN or via --authToken parameter', 'red'))
         exit(1)
 
 if "AAH_SERVER" not in os.environ:
     print(colored('AAH_SERVER environment variable is empty. Please specify one', 'red'))
     exit(1)
 
-
-
-write_debug('Using as remote server: '+os.environ['AAH_SERVER'])
-write_debug('Insecure SSL connection: '+str( not args.ssl_verify))
+write_debug('Using as remote server: ' + os.environ['AAH_SERVER'])
+write_debug('Insecure SSL connection: ' + str(not args.ssl_verify))
 
 if args.sync:
-    write_debug('Found argument sync with option: '+args.sync)
+    write_debug('Found argument sync with option: ' + args.sync)
     if args.sync in ('community', 'rh-certified'):
         sync_remote_repo(args.sync)
     else:
         print(colored('ERROR: the value must be one of community/rh-certified', 'red'))
 
-
 if args.getEEList:
     write_debug('Found argument getEEList')
-    ee_names = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/')
+    ee_names = get_json_list('/api/galaxy/v3/plugin/execution-environments/repositories/')
     print("EE name,sync status")
     print("=========================================================================")
-    print(print_json_formatted(ee_names,'data','.|map([.name,.pulp.repository.remote.last_sync_task.state // "nd"]|join(","))|join("\n")'))
+    print(print_json_formatted(ee_names, 'data', '.|map([.name,.pulp.repository.remote.last_sync_task.state // "nd"]|join(","))|join("\n")'))
     exit(0)
 
 if args.getEEVersion:
     write_debug('Found argument getEEVersion')
 
-    #get the list of all available images names
-    ee_names = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/')
-    #ee_names_list = print_json_formatted(ee_names,'data','.|map([.name]|join(","))|join("\n")')
-    ee_names_list = print_json_formatted(ee_names,'data','.|map([.name]|join(","))')
+    ee_names = get_json_list('/api/galaxy/v3/plugin/execution-environments/repositories/')
+    ee_names_list = print_json_formatted(ee_names, 'data', '.|map([.name]|join(","))')
 
-    #loop over the images names to obtain the images details
     print("image name,pulp_id,sha,version")
     print("=========================================================================")
     for eename in ee_names_list:
-        tmp_ee_images = get_json_list('/api/galaxy/_ui/v1/execution-environments/repositories/' + eename + '/_content/images/')
-        write_debug('/api/galaxy/_ui/v1/execution-environments/repositories/' + eename + '/_content/images/')
-        tmp_ee_images_detail=print_json_formatted(tmp_ee_images,"data",'.|map([.pulp_id,.digest,.tags[] //"nd"]|join(","))|join("\n")',False)
-        #workaround for sort the list
-        py=json.dumps(tmp_ee_images_detail)
-        py_tmp=py.replace("\"","").split("\\n")
+        tmp_ee_images = get_json_list('/api/galaxy/v3/plugin/execution-environments/repositories/' + eename + '/_content/images/')
+        tmp_ee_images_detail = print_json_formatted(tmp_ee_images, "data", '.|map([.pulp_id,.digest,.tags[] //"nd"]|join(","))|join("\n")', False)
+        py = json.dumps(tmp_ee_images_detail)
+        py_tmp = py.replace("\"", "").split("\\n")
         py_tmp.sort(key=len)
         for row in py_tmp:
-            print(eename+","+row)
+            print(eename + "," + row)
+
+if args.listAvailables:
+    write_debug('Found argument listAvailables')
+    available_collections = get_json_list('/api/galaxy/v3/plugin/ansible/search/collection-versions/')
+    print("Repository Name, Repository Description, Collection Name, Collection Description, Collection Version")
+    print("===========================================================================================")
+    available_list = print_json_formatted(available_collections, 'data', '.|map([.repository.name, .repository.description, .collection_version.name, .collection_version.description, .collection_version.version]|join(","))|join("\n")')
+    print(available_list)
+    exit(0)
 
 if args.deleteEE:
     write_debug("delete specified EEimages")
-    if (not args.deleteEE[1].startswith('sha256:')):
-            write_debug("the SHA format is wrong")
-            print('ERROR: wrong SHA format. SHA  must be in the format sha256:XXXXXXXXXXXX')
-            exit(1)
-    delete_status=delete_ee_image('/api/galaxy/_ui/v1/execution-environments/repositories/' + args.deleteEE[0] + '/_content/images/'+args.deleteEE[1]+'/' )
+    if not args.deleteEE[1].startswith('sha256:'):
+        write_debug("the SHA format is wrong")
+        print('ERROR: wrong SHA format. SHA  must be in the format sha256:XXXXXXXXXXXX')
+        exit(1)
+    delete_status = delete_from_system('/api/galaxy/v3/plugin/execution-environments/repositories/' + args.deleteEE[0] + '/_content/images/' + args.deleteEE[1] + '/')
     if delete_status:
-        print('Successfull submitted the deletion of images:'+ args.deleteEE[1])
+        print('Successfull submitted the deletion of images:' + args.deleteEE[1])
         exit(0)
     else:
-        print(colored('ERROR: failed to submit the deletion of: '+args.deleteEE[1], 'red'))
+        print(colored('ERROR: failed to submit the deletion of: ' + args.deleteEE[1], 'red'))
+
+if args.getCollectionList or args.removeCollection or args.deleteCollection:
+    if args.namespace and args.collection and args.repositoryName:
+        general_list = get_json_list('/api/galaxy/v3/plugin/ansible/search/collection-versions/?repository_name=' + args.repositoryName + '&namespace=' + args.namespace + '&name=' + args.collection + '&order_by=-version&offset=0&limit=1000')
+
+        if args.removeCollection or args.deleteCollection:
+            general_names = print_json_formatted(general_list, 'data', '.|map([.collection_version.namespace, .collection_version.name, .collection_version.version, .collection_version.pulp_href, .repository.pulp_href])')
+        else:
+            general_names = print_json_formatted(general_list, 'data', '.|map([.collection_version.namespace, .collection_version.name, .collection_version.version])')
+
+        def version_key(version):
+            return tuple(map(int, version.split('.')))
+
+        general_names.sort(key=lambda x: version_key(x[2]))
+
+        print("Namespace, Name, Version")
+        print("===================================")
+
+        if args.getCollectionList:
+            for version in general_names:
+                print(f"{version[0]}, {version[1]}, {version[2]}")
+
+        if args.removeCollection:
+            if general_names:
+                general_names.pop()
+
+            for version in general_names:
+                namespace, name, version_number, collection_href, repository_href = version
+                print(f"{namespace}, {name}, {version_number}")
+                write_debug(f"Namespace: {namespace}, Name: {name}, Version: {version_number}, Collection Pulp Href: {collection_href}, Repository Pulp Href: {repository_href}")
+
+            for version in general_names:
+                namespace, name, version_number, collection_href, repository_href = version
+                confirm = input(f"Do you want to remove collection {name} version {version_number} from repository? (y/n): ")
+                if confirm.lower() == 'y':
+                    modified_repository_href = repository_href + 'modify/'
+                    delete_status = delete_from_repository(modified_repository_href, collection_href)
+                    if delete_status:
+                        print(f'Successfully removed collection: {name} version: {version_number} from repository')
+                    else:
+                        print(colored(f'ERROR: failed to remove collection: {name} version: {version_number} from repository', 'red'))
+                else:
+                    print(f"Skipped removal of collection: {name} version: {version_number} from repository")
+
+        if args.deleteCollection:
+            if general_names:
+                general_names.pop()
+
+            for version in general_names:
+                namespace, name, version_number = version[:3]
+                print(f"{namespace}, {name}, {version_number}")
+                write_debug(f"Namespace: {namespace}, Name: {name}, Version: {version_number}")
+
+            for version in general_names:
+                namespace, name, version_number = version[:3]
+                confirm = input(f"Do you want to remove collection {name} version {version_number} from system? (y/n): ")
+                if confirm.lower() == 'y':
+                    api_path = f"/api/galaxy/v3/plugin/ansible/content/{args.repositoryName}/collections/index/{namespace}/{name}/versions/{version_number}/"
+                    delete_status = delete_from_system(api_path)
+                    if delete_status:
+                        print(f'Successfully removed collection: {name} version: {version_number} from system')
+                    else:
+                        print(colored(f'ERROR: failed to remove collection: {name} version: {version_number} from system', 'red'))
+                else:
+                    print(f"Skipped removal of collection: {name} version: {version_number} from system")
+    else:
+        print(colored('ERROR: --namespace, --collection, and --repositoryName options are required with --getCollectionList, --removeCollection, and --deleteCollection', 'red'))
+
+if args.reclaimSpace:
+    reclaim_space()
+
