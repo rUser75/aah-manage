@@ -15,6 +15,14 @@ Python 3.9 or later
 Required Python packages: requests, termcolor, jq, urllib3
 
 ## Installation
+<code style="color : red">text</code>
+ You can generate a new AUTHTOKEN using the opion --generateAuthToken you must provvide user and password for the API login. The AUTHTOKEN can be obtained via the http cli:
+
+collections -> API token management
+
+Please note, as wrote in UI WARNING loading a new token will delete your old token.
+
+If you have already configured the API TOKEN please don't generate a new one if you don't know what you're doing
 
 ### Clone the Repository:
 ```sh
