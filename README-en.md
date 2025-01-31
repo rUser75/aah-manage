@@ -102,6 +102,8 @@ python aah-manage.py --authToken <TOKEN>
 * Ensure that the AAH_SERVER environment variable is set to the correct server address.
 * The script requires appropriate permissions to perform operations on Ansible Automation Hub.
 
+* the script refers to community|rh-certified may change from installation to installation
+
 ## Troubleshooting
 Authentication Errors: Verify that the API token is correct and has not expired.
 Connection Issues: Ensure the server address is reachable and correct.
