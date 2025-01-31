@@ -45,12 +45,12 @@ optional arguments:
 
 # italiano
 
-[![it](https://img.shields.io/badge/lang-it-green.svg)][READMe-ita.md](https://github.com/rUser75/aah-manage/blob/main/README-ita.md)
+README [![it](https://img.shields.io/badge/lang-it-green.svg)](https://github.com/rUser75/aah-manage/blob/main/README-ita.md)
 
 ------
 # English
 
-[![en](https://img.shields.io/badge/lang-en-red.svg)][READMe-en.md](https://github.com/rUser75/aah-manage/blob/main/README-en.md)
+README [![en](https://img.shields.io/badge/lang-en-red.svg)](https://github.com/rUser75/aah-manage/blob/main/README-en.md)
 
 
 **This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.**
