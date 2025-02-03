@@ -26,6 +26,7 @@ import json
 import urllib3
 from jq import jq
 import sys
+from packaging.version import Version
 
 version = 1.2
 tlc_ca_bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
@@ -46,9 +47,12 @@ action_grp.add_argument('--deleteEE', required=False, help='delete the specified
 action_grp.add_argument('--getCollectionList', required=False, help='print the list of community general, experimental', action='store_true')
 action_grp.add_argument('--removeCollection', required=False, help='remove the specified collection from repository', action='store_true')
 action_grp.add_argument('--deleteCollection', required=False, help='remove the specified collection from system', action='store_true')
+
 parser.add_argument('--namespace', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Namespace for the collection, required with --getCollectionList, --removeCollection, and --deleteCollection')
 parser.add_argument('--collection', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Name of the collection,required with --getCollectionList, --removeCollection, and --deleteCollection')
 parser.add_argument('--repositoryName', type=str, required='--getCollectionList' in sys.argv or '--removeCollection' in sys.argv or '--deleteCollection' in sys.argv, help='Name of the repository, required with --getCollectionList, --removeCollection, and --deleteCollection')
+
+parser.add_argument('--force', required=False, help='force the operation without asking for confirmation', action='store_true')
 
 action_grp.add_argument('--sync', type=str, required=False, metavar='REPOREMOTENAME', help='start sync of remote repository (Repo Managment). REPOREMOTENAME: community / rh-certified')
 action_grp.add_argument('--reclaimSpace', required=False, help='Trigger an asynchronous space reclaim operation.', action='store_true')
@@ -60,6 +64,14 @@ args = parser.parse_args()
 def write_debug(msg):
     if args.verbose:
         print(colored('Verbose:  ' + msg, 'magenta'))
+
+
+def version_key(version):
+    try:
+        return Version(version)
+    except ValueError:
+        # Gestisci il caso in cui la versione non sia conforme al formato atteso
+        return Version('0.0.0')
 
 def sync_remote_repo(remote_repo):
     headers = {
@@ -149,12 +161,27 @@ def get_json_list(api_path):
         write_debug('SUCCESS: retrieving json data')
         return response.json()
 
+#def print_json_formatted(json_data, sub_set, jq_filter, multiple_output=False):
+#    write_debug('function print_json_formatted')
+#    if sub_set == "None":
+#        tmp_json = json_data
+#    else:
+#        tmp_json = json_data[sub_set]
+#
+#    if len(tmp_json) == 0:
+#        return
+#    return jq(jq_filter).transform(tmp_json, multiple_output=multiple_output)
+
 def print_json_formatted(json_data, sub_set, jq_filter, multiple_output=False):
     write_debug('function print_json_formatted')
-    if sub_set == "None":
+
+    # Se sub_set è None, usiamo direttamente json_data
+    if sub_set is None:
         tmp_json = json_data
-    else:
-        tmp_json = json_data[sub_set]
+    elif isinstance(json_data, dict):
+        tmp_json = json_data.get(sub_set, {})
+    elif isinstance(json_data, list):
+        tmp_json = json_data  # Questo caso è per completezza, ma non necessario con sub_set None
 
     if len(tmp_json) == 0:
         return
@@ -245,14 +272,68 @@ if args.getEEVersion:
         for row in py_tmp:
             print(eename + "," + row)
 
+
+
+def fetch_all_collections(base_path):
+    collections = []
+    current_path = base_path
+
+    while current_path:
+        headers = {
+            'Authorization': f"Token {auth_token}",
+            'Accept': 'application/json'
+        }
+        params = {
+            'limit': '100',
+        }
+        write_debug("open URL: " + current_path)
+
+        response = requests.get(
+            'https://' + os.environ['AAH_SERVER'] + current_path,
+            params=params,
+            headers=headers,
+            verify=custom_certificate_path,
+        )
+
+        if response.status_code != 200:
+            print(colored('ERROR: unable to get data from: ' + current_path + ' httpd retcode: ' + str(response.status_code), 'red'))
+            break
+        else:
+            write_debug('SUCCESS: retrieving json data')
+            response_data = response.json()
+
+            # Aggiungi i dati della pagina corrente alla lista delle collezioni
+            collections.extend(response_data.get('data', []))
+
+            # Ottieni il link alla pagina successiva
+            current_path = response_data.get('links', {}).get('next')
+
+    return collections
+
 if args.listAvailables:
     write_debug('Found argument listAvailables')
-    available_collections = get_json_list('/api/galaxy/v3/plugin/ansible/search/collection-versions/')
+    base_path = '/api/galaxy/v3/plugin/ansible/search/collection-versions/?limit=100'
+    available_collections = fetch_all_collections(base_path)
+
+    # Scrivi il contenuto di available_collections in un file
+    if args.verbose:
+        temp_folder = os.environ.get('JOBLIB_TEMP_FOLDER', '/tmp')
+        file_path = os.path.join(temp_folder, 'available_collections.json')
+        write_debug('dump content on file: '+ file_path)
+        with open(file_path, 'w', encoding='utf-8') as file:
+            json.dump(available_collections, file, ensure_ascii=False, indent=4)
+
+
     print("Repository Name, Repository Description, Collection Name, Collection Description, Collection Version")
     print("===========================================================================================")
-    available_list = print_json_formatted(available_collections, 'data', '.|map([.repository.name, .repository.description, .collection_version.name, .collection_version.description, .collection_version.version]|join(","))|join("\n")')
+    available_list = print_json_formatted(
+        available_collections,
+        None,
+        '.|map([.repository.name, .repository.description, .collection_version.name, .collection_version.description, .collection_version.version]|join(","))|join("\n")'
+    )
     print(available_list)
     exit(0)
+
 
 if args.deleteEE:
     write_debug("delete specified EEimages")
@@ -276,9 +357,6 @@ if args.getCollectionList or args.removeCollection or args.deleteCollection:
         else:
             general_names = print_json_formatted(general_list, 'data', '.|map([.collection_version.namespace, .collection_version.name, .collection_version.version])')
 
-        def version_key(version):
-            return tuple(map(int, version.split('.')))
-
         general_names.sort(key=lambda x: version_key(x[2]))
 
         print("Namespace, Name, Version")
@@ -299,8 +377,7 @@ if args.getCollectionList or args.removeCollection or args.deleteCollection:
 
             for version in general_names:
                 namespace, name, version_number, collection_href, repository_href = version
-                confirm = input(f"Do you want to remove collection {name} version {version_number} from repository? (y/n): ")
-                if confirm.lower() == 'y':
+                if args.force or input(f"Do you want to remove collection {name} version {version_number} from repository? (y/n): ").lower() == 'y':
                     modified_repository_href = repository_href + 'modify/'
                     delete_status = delete_from_repository(modified_repository_href, collection_href)
                     if delete_status:
@@ -321,8 +398,7 @@ if args.getCollectionList or args.removeCollection or args.deleteCollection:
 
             for version in general_names:
                 namespace, name, version_number = version[:3]
-                confirm = input(f"Do you want to remove collection {name} version {version_number} from system? (y/n): ")
-                if confirm.lower() == 'y':
+                if args.force or input(f"Do you want to remove collection {name} version {version_number} from system? (y/n): ").lower() == 'y':
                     api_path = f"/api/galaxy/v3/plugin/ansible/content/{args.repositoryName}/collections/index/{namespace}/{name}/versions/{version_number}/"
                     delete_status = delete_from_system(api_path)
                     if delete_status:
@@ -336,4 +412,3 @@ if args.getCollectionList or args.removeCollection or args.deleteCollection:
 
 if args.reclaimSpace:
     reclaim_space()
-
