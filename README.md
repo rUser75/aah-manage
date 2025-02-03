@@ -12,8 +12,8 @@ see INSTALL.md file
 ### Synopsis
 aah-manage commands follow a simple format:
 ```
-usage: aah-manage_v4 [-h] [--authToken AUTHTOKEN | --generateAuthToken CREDENTIAL] [--getEEList] [--getEEVersion] [--listAvailables] [--deleteEE EEname SHA] [--getCollectionList] [--removeCollection] [--deleteCollection]
-                     [--namespace NAMESPACE] [--collection COLLECTION] [--repositoryName REPOSITORYNAME] [--sync REPOREMOTENAME] [-k] [-v]
+usage: aah-manage [-h] [--authToken AUTHTOKEN | --generateAuthToken CREDENTIAL] [--getEEList] [--getEEVersion] [--listAvailables] [--deleteEE EEname SHA] [--getCollectionList] [--removeCollection]
+                  [--deleteCollection] [--namespace NAMESPACE] [--collection COLLECTION] [--repositoryName REPOSITORYNAME] [--force] [--sync REPOREMOTENAME] [--reclaimSpace] [-k] [-v]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -35,8 +35,10 @@ optional arguments:
                         Name of the collection,required with --getCollectionList, --removeCollection, and --deleteCollection
   --repositoryName REPOSITORYNAME
                         Name of the repository, required with --getCollectionList, --removeCollection, and --deleteCollection
+  --force               force the operation without asking for confirmation
   --sync REPOREMOTENAME
                         start sync of remote repository (Repo Managment). REPOREMOTENAME: community / rh-certified
+  --reclaimSpace        Trigger an asynchronous space reclaim operation.
   -k                    Allow insecure server connections when using SSL
   -v                    write verbose output
 
