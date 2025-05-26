@@ -28,15 +28,23 @@ from jq import jq
 import sys
 from packaging.version import Version
 
-version = 1.2
+version = 1.2.1
 tlc_ca_bundle = "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"
 
 os.environ['JOBLIB_TEMP_FOLDER'] = '/tmp'
 
-parser = argparse.ArgumentParser()
+parser = argparse.ArgumentParser(
+  description='This script is designed to manage various actions on Ansible Automation Hub.',
+  epilog=('Note:\n'
+          '- Ensure that the Ansible Automation Hub server is accessible and that you have the necessary permissions to perform the operations.\n'
+          '- Use the AAH_SERVER environment variable to set the FQDN or IP of the Ansible Automation Hub.\n'
+          '- You can use \'read -s -p "AUTH_TOKEN:" AUTH_TOKEN\' for hide AUTH_TOKEN value.'
+  ),
+  formatter_class=argparse.RawTextHelpFormatter
+)
 token_grp = parser.add_mutually_exclusive_group()
 
-token_grp.add_argument('--authToken', type=str, required=False, help='API token for authentication')
+token_grp.add_argument('--authToken', type=str, required=False, help='API token for authentication or set AUTH_TOKEN environment variable')
 token_grp.add_argument('--generateAuthToken', type=str, required=False, metavar='CREDENTIAL', help='generate a NEW AuthToken.  You must specify the credetial for the login (user:password). WARNING: loading a new token will delete your old token')
 action_grp = parser.add_mutually_exclusive_group()
 action_grp.add_argument('--getEEList', required=False, help='print the list of available EE images', action='store_true')
@@ -207,7 +215,7 @@ def reclaim_space():
     if response.status_code != 202:
         print(colored('ERROR: space reclaim operation failed. httpd retcode: ' + str(response.status_code), 'red'))
     else:
-        print(colored('SUCCESS: space reclaim operation started.See AAH Task managment for the result', 'green'))
+        print(colored('SUCCESS: space reclaim operation started. See AAH Task managment for the result', 'green'))
 
 if not args.ssl_verify:
     write_debug('Setup secure connection use ' + tlc_ca_bundle)
